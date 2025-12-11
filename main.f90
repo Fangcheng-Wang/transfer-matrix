@@ -1,5 +1,5 @@
 program test
-    use potts_em
+    use potts2_em
     implicit none
     
     call calculate_coefficients('periodic')
