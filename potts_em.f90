@@ -1,19 +1,18 @@
-module potts2_em
+module potts_em
     implicit none
 
     private
-    public :: calculate_coefficients, print_coefficients
-
-    integer, parameter :: q = 2
+    public :: calculate_coefficients, print_coefficients, write_coefficients
 
     ! i in [1, l], j in [1, n], k in [1, q], b in [0, max_bonds - 1], m in [0, max_magnets - 1], index in [1, n_intra_states]
-    integer, parameter :: l = 6, n = 6
+    integer, parameter :: l = 8, n = 8, q = 3
     integer, parameter :: max_bonds = l * n * 2 + 1
     integer, parameter :: max_magnets = l * n + 1
     integer, parameter :: n_intra_states = q ** l
     
     integer :: interaction(q, q)
     integer :: magnet(q)
+    character :: boundary
 
     ! o(1+b, 1+m, index) is the number of configurations with b bonds, m magnets and the index-th intra-layer state,
     ! where a bond is defined as an edge connecting two spins with the *SAME* state,
@@ -26,22 +25,22 @@ module potts2_em
 
 contains
 
-    subroutine initialize(boundary)
-        character(len = *), intent(in) :: boundary
+    subroutine initialize()
         integer :: index, k
 
         interaction(:, :) = 0
         do concurrent (k = 1:q)
             interaction(k, k) = 1
         end do
-        magnet = [1, 0]
+        magnet(:) = 0
+        magnet(1) = 1
 
         o => o_storage
         oo => oo_storage
 
         o(:, :, :) = 0
         do concurrent (index = 1:n_intra_states)
-            o(1+intra_bonds(index, boundary), 1+intra_magnets(index), index) = 1
+            o(1+intra_bonds(index), 1+intra_magnets(index), index) = 1
         end do
     end subroutine initialize
 
@@ -63,31 +62,31 @@ contains
         call swap_arrays()
     end subroutine intra_layer
     
-    subroutine finalize_layer(boundary)
-        character(len = *), intent(in) :: boundary
+    subroutine finalize_layer()
         integer :: index, db
         oo(:, :, :) = 0
         do concurrent (index = 1:n_intra_states)
-            db = intra_bonds(index, boundary)
+            db = intra_bonds(index)
             oo((1+db):, :, index) = oo((1+db):, :, index) + o(:(max_bonds-db), :, index)
         end do
         call swap_arrays()
     end subroutine finalize_layer
 
-    subroutine calculate_coefficients(boundary)
-        character(len = *), intent(in) :: boundary
+    subroutine calculate_coefficients(boundary_val)
+        character, intent(in) :: boundary_val
         integer :: i, j
+        boundary = boundary_val
 
         print *, 'calculating coefficients for q-state Potts model on l * n lattice with'
-        print *, 'l = ', l, '(', boundary, ' boundary)'
-        print *, 'n = ', n, '(open boundary)'
+        print *, 'l = ', l, '(', boundary, ')'
+        print *, 'n = ', n, '(o)'
         print *, 'q = ', q
-        call initialize(boundary)
+        call initialize()
         do j = 2, n
             do i = 1, l
                 call intra_layer(i)
             end do
-            call finalize_layer(boundary)
+            call finalize_layer()
         end do
         final_coefficients = sum(o, 3)
     end subroutine calculate_coefficients
@@ -96,7 +95,7 @@ contains
         integer :: b, m
         integer(kind = 16) :: theoretical_total
 
-        print *, '      bonds                                    count'
+        print *, '      bonds           m                                    count'
         do b = 0, max_bonds - 1
             do m = 0, max_magnets - 1
                 print *, b, m, final_coefficients(1+b, 1+m)
@@ -109,6 +108,36 @@ contains
         print *, 'total (calc.):', sum(final_coefficients)
         print *, 'difference:   ', sum(final_coefficients) - theoretical_total
     end subroutine print_coefficients
+
+    subroutine write_coefficients()
+        integer :: b, m, unit, iostat
+        character(len = 100) :: filename
+        integer(kind = 16) :: theoretical_total
+        
+        write(filename, '(A,I0,A,I0,A,I0,A,A,A)') &
+            'em_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
+        open(newunit = unit, file = trim(filename), status = 'replace', action = 'write', iostat = iostat)
+        if (iostat /= 0) then
+            error stop 'failed to open file'
+        end if
+        write(unit, '(A)') '# bonds,m,count'
+        
+        do b = 0, max_bonds - 1
+            do m = 0, max_magnets - 1
+                write(unit, '(I0,A,I0,A,I0)') &
+                    b, ',', m, ',', final_coefficients(1+b, 1+m)
+            end do
+        end do
+        
+        close(unit)
+        
+        theoretical_total = q
+        theoretical_total = theoretical_total ** (l * n)
+        print '(A,A)', 'CSV file written: ', trim(filename)
+        print *, 'total (theo.):', theoretical_total
+        print *, 'total (calc.):', sum(final_coefficients)
+        print *, 'difference:   ', sum(final_coefficients) - theoretical_total
+    end subroutine write_coefficients
 
     subroutine swap_arrays()
         integer(kind = 16), pointer :: temp(:,:,:)
@@ -139,16 +168,15 @@ contains
         end do
     end function index_to_states
 
-    pure function intra_bonds(index, boundary) result(b)
-        character(len = *), intent(in) :: boundary
+    pure function intra_bonds(index) result(b)
         integer, intent(in) :: index
         integer :: b
         integer :: states(l), i, max_i
 
         states = index_to_states(index)
-        if (boundary == 'open') then
+        if (boundary == 'o') then
             max_i = l - 1
-        else if (boundary == 'periodic') then
+        else if (boundary == 'p') then
             max_i = l
         else
             error stop 'invalid boundary condition'
@@ -165,4 +193,4 @@ contains
         integer :: m
         m = count(index_to_states(index) == 1)
     end function intra_magnets
-end module potts2_em
+end module potts_em

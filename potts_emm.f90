@@ -1,24 +1,27 @@
-module potts_e
+module potts_emm
     implicit none
 
     private
     public :: calculate_coefficients, print_coefficients, write_coefficients
 
-    ! i in [1, l], j in [1, n], k in [1, q], b in [0, max_bonds - 1], index in [1, n_intra_states]
-    integer, parameter :: l = 8, n = 8, q = 3
+    ! i in [1, l], j in [1, n], k in [1, q], b in [0, max_bonds - 1], m1, m2 in [0, max_magnets - 1], index in [1, n_intra_states]
+    integer, parameter :: l = 2, n = 2, q = 3
     integer, parameter :: max_bonds = l * n * 2 + 1
+    integer, parameter :: max_magnets = l * n + 1
     integer, parameter :: n_intra_states = q ** l
     
     integer :: interaction(q, q)
+    integer :: magnet1(q), magnet2(q)
     character :: boundary
 
-    ! o(1+b, index) is the number of configurations with b bonds and the index-th intra-layer state,
-    ! where a bond is defined as an edge connecting two spins with the *SAME* state
-    integer(kind = 16), target :: o_storage(max_bonds, n_intra_states)
-    integer(kind = 16), target :: oo_storage(max_bonds, n_intra_states)
-    integer(kind = 16), pointer :: o(:,:) => null()
-    integer(kind = 16), pointer :: oo(:,:) => null()
-    integer(kind = 16) :: final_coefficients(max_bonds)
+    ! o(1+b, 1+m1, 1+m2, index) is the number of configurations with b bonds, m1 spins with state k=1, m2 spins with state k=2 and the index-th intra-layer state,
+    ! where a bond is defined as an edge connecting two spins with the *SAME* state,
+    ! and m1 (m2) is defined as the number of spins with state k=1 (k=2)
+    integer(kind = 16), target :: o_storage(max_bonds, max_magnets, max_magnets, n_intra_states)
+    integer(kind = 16), target :: oo_storage(max_bonds, max_magnets, max_magnets, n_intra_states)
+    integer(kind = 16), pointer :: o(:,:,:,:) => null()
+    integer(kind = 16), pointer :: oo(:,:,:,:) => null()
+    integer(kind = 16) :: final_coefficients(max_bonds, max_magnets, max_magnets)
 
 contains
 
@@ -29,28 +32,35 @@ contains
         do concurrent (k = 1:q)
             interaction(k, k) = 1
         end do
+        magnet1(:) = 0
+        magnet1(1) = 1
+        magnet2(:) = 0
+        magnet2(2) = 1
 
         o => o_storage
         oo => oo_storage
 
-        o(:, :) = 0
+        o(:, :, :, :) = 0
         do concurrent (index = 1:n_intra_states)
-            o(1+intra_bonds(index), index) = 1
+            o(1+intra_bonds(index), 1+intra_magnets(index, 1), 1+intra_magnets(index, 2), index) = 1
         end do
     end subroutine initialize
 
     subroutine intra_layer(i)
         integer, intent(in) :: i
         integer :: k, old_states(l), new_states(l)
-        integer :: index, db
-        oo(:, :) = 0
+        integer :: index, db, dm1, dm2
+        oo(:, :, :, :) = 0
         do concurrent (index = 1:n_intra_states)
             new_states = index_to_states(index)
             old_states = new_states
             do k = 1, q
                 old_states(i) = k
                 db = interaction(new_states(i), old_states(i))
-                oo((1+db):, index) = oo((1+db):, index) + o(:(max_bonds-db), states_to_index(old_states))
+                dm1 = magnet1(new_states(i))
+                dm2 = magnet2(new_states(i))
+                oo((1+db):, (1+dm1):, (1+dm2):, index) = oo((1+db):, (1+dm1):, (1+dm2):, index) &
+                    + o(:(max_bonds-db), :(max_magnets-dm1), :(max_magnets-dm2), states_to_index(old_states))
             end do
         end do
         call swap_arrays()
@@ -58,10 +68,10 @@ contains
     
     subroutine finalize_layer()
         integer :: index, db
-        oo(:, :) = 0
+        oo(:, :, :, :) = 0
         do concurrent (index = 1:n_intra_states)
             db = intra_bonds(index)
-            oo((1+db):, index) = oo((1+db):, index) + o(:(max_bonds-db), index)
+            oo((1+db):, :, :, index) = oo((1+db):, :, :, index) + o(:(max_bonds-db), :, :, index)
         end do
         call swap_arrays()
     end subroutine finalize_layer
@@ -82,16 +92,20 @@ contains
             end do
             call finalize_layer()
         end do
-        final_coefficients = sum(o, 2)
+        final_coefficients = sum(o, 4)
     end subroutine calculate_coefficients
 
     subroutine print_coefficients()
-        integer :: b
+        integer :: b, m1, m2
         integer(kind = 16) :: theoretical_total
 
-        print *, '      bonds                                    count'
+        print *, '      bonds          m1          m2                                    count'
         do b = 0, max_bonds - 1
-            print *, b, final_coefficients(1+b)
+            do m1 = 0, max_magnets - 1
+                do m2 = 0, max_magnets - 1
+                    print *, b, m1, m2, final_coefficients(1+b, 1+m1, 1+m2)
+                end do
+            end do
         end do
 
         theoretical_total = q
@@ -102,21 +116,25 @@ contains
     end subroutine print_coefficients
 
     subroutine write_coefficients()
-        integer :: b, unit, iostat
+        integer :: b, m1, m2, unit, iostat
         character(len = 100) :: filename
         integer(kind = 16) :: theoretical_total
         
         write(filename, '(A,I0,A,I0,A,I0,A,A,A)') &
-            'e_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
+            'emm_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
         open(newunit = unit, file = trim(filename), status = 'replace', action = 'write', iostat = iostat)
         if (iostat /= 0) then
             error stop 'failed to open file'
         end if
-        write(unit, '(A)') '# bonds,count'
+        write(unit, '(A)') '# bonds,m1,m2,count'
         
         do b = 0, max_bonds - 1
-            write(unit, '(I0,A,I0)') &
-                b, ',', final_coefficients(1+b)
+            do m1 = 0, max_magnets - 1
+                do m2 = 0, max_magnets - 1
+                    write(unit, '(I0,A,I0,A,I0,A,I0)') &
+                        b, ',', m1, ',', m2, ',', final_coefficients(1+b, 1+m1, 1+m2)
+                end do
+            end do
         end do
         
         close(unit)
@@ -130,7 +148,7 @@ contains
     end subroutine write_coefficients
 
     subroutine swap_arrays()
-        integer(kind = 16), pointer :: temp(:,:)
+        integer(kind = 16), pointer :: temp(:,:,:,:)
         temp => o
         o => oo
         oo => temp
@@ -178,4 +196,9 @@ contains
         end do
     end function intra_bonds
 
-end module potts_e
+    pure function intra_magnets(index, k) result(m)
+        integer, intent(in) :: index, k
+        integer :: m
+        m = count(index_to_states(index) == k)
+    end function intra_magnets
+end module potts_emm
