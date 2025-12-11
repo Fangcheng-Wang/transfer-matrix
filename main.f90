@@ -1,7 +1,7 @@
 program test
-    use potts_coefficients
+    use potts_em
     implicit none
     
-    call calculate_coefficients('open')
+    call calculate_coefficients('periodic')
     call print_coefficients()
 end program test

@@ -1,11 +1,11 @@
-module potts_coefficients
+module potts_em
     implicit none
 
     private
     public :: calculate_coefficients, print_coefficients
 
     ! i in [1, l], j in [1, m], k in [1, q], b in [0, max_bonds - 1], index in [1, n_intra_states]
-    integer, parameter :: l = 7, m = 7, q = 2
+    integer, parameter :: l = 4, m = 4, q = 3
     integer, parameter :: max_bonds = l * m * 2 + 1
     integer, parameter :: n_intra_states = q ** l
     
@@ -70,6 +70,11 @@ contains
     subroutine calculate_coefficients(boundary)
         character(len = *), intent(in) :: boundary
         integer :: i, j
+
+        print *, 'calculating coefficients for q-state Potts model on l * m lattice with'
+        print *, 'l = ', l, '(', boundary, ' boundary)'
+        print *, 'm = ', m, '(open boundary)'
+        print *, 'q = ', q
         call initialize(boundary)
         do j = 2, m
             do i = 1, l
@@ -91,8 +96,9 @@ contains
 
         theoretical_total = q
         theoretical_total = theoretical_total ** (l * m)
-        print *, 'total configurations (theoretical):', theoretical_total
-        print *, 'total configurations (calculation):', sum(final_coefficients)
+        print *, 'total (theo.):', theoretical_total
+        print *, 'total (calc.):', sum(final_coefficients)
+        print *, 'difference:   ', sum(final_coefficients) - theoretical_total
     end subroutine print_coefficients
 
     subroutine swap_arrays()
@@ -145,4 +151,4 @@ contains
         end do
     end function intra_bonds
 
-end module potts_coefficients
+end module potts_em
