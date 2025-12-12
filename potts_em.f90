@@ -56,7 +56,8 @@ contains
                 old_states(i) = k
                 db = interaction(new_states(i), old_states(i))
                 dm = magnet(new_states(i))
-                oo((1+db):, (1+dm):, index) = oo((1+db):, (1+dm):, index) + o(:(max_bonds-db), :(max_magnets-dm), states_to_index(old_states))
+                oo((1+db):, (1+dm):, index) = oo((1+db):, (1+dm):, index) &
+                    + o(:(max_bonds-db), :(max_magnets-dm), states_to_index(old_states))
             end do
         end do
         call swap_arrays()
@@ -93,12 +94,15 @@ contains
 
     subroutine print_coefficients()
         integer :: b, m
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
 
         print *, '      bonds           m                                    count'
         do b = 0, max_bonds - 1
             do m = 0, max_magnets - 1
-                print *, b, m, final_coefficients(1+b, 1+m)
+                temp = final_coefficients(1+b, 1+m)
+                if (temp /= 0) then
+                    print *, b, m, temp
+                end if
             end do
         end do
 
@@ -112,7 +116,7 @@ contains
     subroutine write_coefficients()
         integer :: b, m, unit, iostat
         character(len = 100) :: filename
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
         
         write(filename, '(A,I0,A,I0,A,I0,A,A,A)') &
             'em_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
@@ -124,8 +128,10 @@ contains
         
         do b = 0, max_bonds - 1
             do m = 0, max_magnets - 1
-                write(unit, '(I0,A,I0,A,I0)') &
-                    b, ',', m, ',', final_coefficients(1+b, 1+m)
+                temp = final_coefficients(1+b, 1+m)
+                if (temp /= 0) then
+                    write(unit, '(I0,A,I0,A,I0)') b, ',', m, ',', temp
+                end if
             end do
         end do
         

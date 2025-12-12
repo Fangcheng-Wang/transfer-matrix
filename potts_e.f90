@@ -87,11 +87,14 @@ contains
 
     subroutine print_coefficients()
         integer :: b
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
 
         print *, '      bonds                                    count'
         do b = 0, max_bonds - 1
-            print *, b, final_coefficients(1+b)
+            temp = final_coefficients(1+b)
+            if (temp /= 0) then
+                print *, b, temp
+            end if
         end do
 
         theoretical_total = q
@@ -104,7 +107,7 @@ contains
     subroutine write_coefficients()
         integer :: b, unit, iostat
         character(len = 100) :: filename
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
         
         write(filename, '(A,I0,A,I0,A,I0,A,A,A)') &
             'e_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
@@ -115,8 +118,10 @@ contains
         write(unit, '(A)') '# bonds,count'
         
         do b = 0, max_bonds - 1
-            write(unit, '(I0,A,I0)') &
-                b, ',', final_coefficients(1+b)
+            temp = final_coefficients(1+b)
+            if (temp /= 0) then
+                write(unit, '(I0,A,I0)') b, ',', temp
+            end if
         end do
         
         close(unit)

@@ -5,7 +5,7 @@ module potts_emm
     public :: calculate_coefficients, print_coefficients, write_coefficients
 
     ! i in [1, l], j in [1, n], k in [1, q], b in [0, max_bonds - 1], m1, m2 in [0, max_magnets - 1], index in [1, n_intra_states]
-    integer, parameter :: l = 2, n = 2, q = 3
+    integer, parameter :: l = 3, n = 2, q = 3
     integer, parameter :: max_bonds = l * n * 2 + 1
     integer, parameter :: max_magnets = l * n + 1
     integer, parameter :: n_intra_states = q ** l
@@ -97,13 +97,16 @@ contains
 
     subroutine print_coefficients()
         integer :: b, m1, m2
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
 
         print *, '      bonds          m1          m2                                    count'
         do b = 0, max_bonds - 1
             do m1 = 0, max_magnets - 1
                 do m2 = 0, max_magnets - 1
-                    print *, b, m1, m2, final_coefficients(1+b, 1+m1, 1+m2)
+                    temp = final_coefficients(1+b, 1+m1, 1+m2)
+                    if (temp /= 0) then
+                        print *, b, m1, m2, temp
+                    end if
                 end do
             end do
         end do
@@ -118,7 +121,7 @@ contains
     subroutine write_coefficients()
         integer :: b, m1, m2, unit, iostat
         character(len = 100) :: filename
-        integer(kind = 16) :: theoretical_total
+        integer(kind = 16) :: temp, theoretical_total
         
         write(filename, '(A,I0,A,I0,A,I0,A,A,A)') &
             'emm_l', l, '_n', n, '_q', q, '_', boundary, '.csv'
@@ -131,8 +134,10 @@ contains
         do b = 0, max_bonds - 1
             do m1 = 0, max_magnets - 1
                 do m2 = 0, max_magnets - 1
-                    write(unit, '(I0,A,I0,A,I0,A,I0)') &
-                        b, ',', m1, ',', m2, ',', final_coefficients(1+b, 1+m1, 1+m2)
+                    temp = final_coefficients(1+b, 1+m1, 1+m2)
+                    if (temp /= 0) then
+                        write(unit, '(I0,A,I0,A,I0,A,I0)') b, ',', m1, ',', m2, ',', temp
+                    end if
                 end do
             end do
         end do
