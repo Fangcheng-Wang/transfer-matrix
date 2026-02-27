@@ -5,7 +5,7 @@ module potts_em
     public :: calculate_coefficients, print_coefficients, write_coefficients
 
     ! i in [1, l], j in [1, n], k in [1, q], b in [0, max_bonds - 1], m in [0, max_magnets - 1], index in [1, n_intra_states]
-    integer, parameter :: l = 8, n = 8, q = 3
+    integer, parameter :: l = 10, n = 10, q = 2
     integer, parameter :: max_bonds = l * n * 2 + 1
     integer, parameter :: max_magnets = l * n + 1
     integer, parameter :: n_intra_states = q ** l

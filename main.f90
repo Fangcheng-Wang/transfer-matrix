@@ -1,7 +1,7 @@
 program test
-    use potts_emm
+    use potts_e
     implicit none
     
-    call calculate_coefficients('o')
+    call calculate_coefficients('p')
     call write_coefficients()
 end program test
